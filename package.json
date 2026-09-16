@@ -1,0 +1,15 @@
+{
+	"type": "module",
+	"scripts": {
+		"dev": "node server.js",
+		"db:setup": "node server_db.js"
+	},
+	"dependencies": {
+		"dotenv": "^17.4.2",
+		"fastify": "^5.12.3",
+		"postgres": "^3.4.9"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.13"
+	}
+}
