@@ -71,7 +71,7 @@ h2 {
 	margin: 0;
 }
 label {
-	color: #bac3d4;
+	color: #ebe9ef;
 	display: grid;
 	font-size: 0.86rem;
 	font-weight: 650;
@@ -156,7 +156,7 @@ textarea:focus {
 	margin: 0 56px 7px 0;
 }
 .video-card p {
-	color: #aeb8ca;
+	color: #eaebef;
 	line-height: 1.45;
 	margin: 0 0 16px;
 	white-space: pre-wrap;
@@ -178,6 +178,111 @@ textarea:focus {
 .card-actions .danger {
 	color: #fda4af;
 }
+.back-button {
+	margin-bottom: 28px;
+}
+.player-page {
+	background: #141b2d;
+	border: 1px solid #27314a;
+	border-radius: 18px;
+	padding: 24px;
+}
+.player-page h1 {
+	font-size: clamp(1.8rem, 4vw, 3.2rem);
+	margin-bottom: 24px;
+}
+.player-heading {
+	align-items: flex-start;
+	display: flex;
+	gap: 16px;
+	justify-content: space-between;
+}
+.share-button {
+	background: #8b5cf6;
+	border: 0;
+	border-radius: 9px;
+	color: white;
+	font-weight: 750;
+	padding: 10px 14px;
+}
+.share-button:hover {
+	background: #7c3aed;
+}
+.player-page video {
+	background: #000;
+	border-radius: 12px;
+	display: block;
+	max-height: 70vh;
+	width: 100%;
+}
+.video-player {
+	background: #080d18;
+	border: 1px solid #303b54;
+	border-radius: 14px;
+	overflow: hidden;
+}
+.player-controls {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	padding: 12px;
+}
+.player-controls button,
+.file-picker {
+	background: #25203d;
+	border: 1px solid #514779;
+	border-radius: 9px;
+	color: #e9ddff;
+	font-weight: 750;
+	padding: 9px 13px;
+}
+.player-controls button:hover,
+.file-picker:hover {
+	background: #322a52;
+	border-color: #8b5cf6;
+}
+.upload-field {
+	margin-top: 18px;
+}
+.upload-field > label:first-child {
+	margin-top: 0;
+}
+.file-input {
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	position: absolute;
+	width: 1px;
+	clip: rect(0 0 0 0);
+}
+.file-picker {
+	align-items: center;
+	display: flex;
+	justify-content: center;
+	margin-top: 7px;
+	width: fit-content;
+}
+.file-input:focus + .file-picker {
+	box-shadow: 0 0 0 3px #8b5cf633;
+}
+.file-name {
+	color: #9ba8bd;
+	font-size: 0.82rem;
+	margin: 8px 0 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.video-description {
+	color: #c6cfdf;
+	line-height: 1.55;
+	margin: 24px 0 8px;
+	white-space: pre-wrap;
+}
+.video-meta {
+	color: #e6e8ec;
+	margin: 0;
+}
 .state {
 	color: #9ba8bd;
 	padding: 34px 0;
@@ -196,5 +301,9 @@ textarea:focus {
 	}
 	.search {
 		max-width: none;
+	}
+	.player-heading {
+		align-items: stretch;
+		flex-direction: column;
 	}
 }

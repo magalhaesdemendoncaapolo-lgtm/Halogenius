@@ -7,8 +7,13 @@ await sql`
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     description TEXT NOT NULL,
-    duration INTEGER NOT NULL CHECK (duration >= 0)
+    duration INTEGER NOT NULL CHECK (duration >= 0),
+    video_path TEXT,
+    video_mime_type TEXT
   )
 `;
+
+await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_path TEXT`;
+await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_mime_type TEXT`;
 
 await sql.end();
