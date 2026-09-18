@@ -4,7 +4,8 @@ export class DatabasePostgres {
 	async list(search) {
 		if (search) {
 			return sql`
-				SELECT id, title, description, duration, video_path AS "videoPath"
+				SELECT id, title, description, duration,
+                    COALESCE(video_url, video_path) AS "videoUrl"
                 FROM videos
                 WHERE title ILIKE ${`%${search}%`}
                 ORDER BY title
@@ -12,18 +13,33 @@ export class DatabasePostgres {
 		}
 
 		return sql`
-			SELECT id, title, description, duration, video_path AS "videoPath"
+			SELECT id, title, description, duration,
+                COALESCE(video_url, video_path) AS "videoUrl"
             FROM videos
             ORDER BY title
         `;
 	}
 
 	async create(video) {
-		const { title, description, duration, videoPath, videoMimeType } = video;
+		const {
+			title,
+			description,
+			duration,
+			videoPath,
+			videoUrl,
+			videoMimeType,
+			cloudinaryPublicId,
+		} = video;
 
 		await sql`
-            INSERT INTO videos (title, description, duration, video_path, video_mime_type)
-            VALUES (${title}, ${description}, ${duration}, ${videoPath}, ${videoMimeType})
+            INSERT INTO videos (
+                title, description, duration, video_path, video_url,
+                video_mime_type, cloudinary_public_id
+            )
+            VALUES (
+                ${title}, ${description}, ${duration}, ${videoPath}, ${videoUrl},
+                ${videoMimeType}, ${cloudinaryPublicId}
+            )
         `;
 	}
 
@@ -43,7 +59,9 @@ export class DatabasePostgres {
 		const result = await sql`
             DELETE FROM videos
             WHERE id = ${id}
-            RETURNING video_path AS "videoPath"
+            RETURNING
+                video_path AS "videoPath",
+                cloudinary_public_id AS "cloudinaryPublicId"
         `;
 
 		return result[0] || null;

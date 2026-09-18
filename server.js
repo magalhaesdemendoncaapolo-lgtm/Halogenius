@@ -4,8 +4,14 @@ import { mkdir, stat, unlink } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
+import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastify from "fastify";
+import {
+	cloudinaryEnabled,
+	deleteVideoFromCloudinary,
+	uploadVideoToCloudinary,
+} from "./cloudinary.js";
 import { DatabasePostgres } from "./db_postgres.js";
 import { host, port } from "./server_host.js";
 
@@ -19,9 +25,34 @@ const maxVideoSize = 100 * 1024 * 1024;
 
 await mkdir(uploadsDirectory, { recursive: true });
 
+await server.register(cors, {
+	origin:
+		process.env.CORS_ORIGIN?.split(",").map((origin) => origin.trim()) || false,
+});
+
 await server.register(multipart, {
 	limits: { files: 1, fileSize: maxVideoSize },
 });
+
+async function removeStoredVideo(video) {
+	if (!video) return;
+
+	if (video.cloudinaryPublicId) {
+		await deleteVideoFromCloudinary(video.cloudinaryPublicId);
+		return;
+	}
+
+	if (video.destination) {
+		await unlink(video.destination).catch(() => {});
+	}
+
+	if (video.videoPath) {
+		const filename = basename(video.videoPath);
+		await unlink(join(uploadsDirectory, filename)).catch(() => {});
+	}
+}
+
+server.get("/health", async () => ({ status: "ok" }));
 
 const videoSchema = {
 	type: "object",
@@ -64,23 +95,36 @@ server.post("/videos", async (request, reply) => {
 					.send({ message: "Selecione um arquivo de vídeo válido." });
 			}
 
-			const extension = extname(part.filename).toLowerCase() || ".mp4";
-			const filename = `${randomUUID()}${extension}`;
-			const destination = join(uploadsDirectory, filename);
+			if (cloudinaryEnabled) {
+				const uploaded = await uploadVideoToCloudinary(
+					part.file,
+					part.filename,
+				);
+				uploadedFile = {
+					videoUrl: uploaded.secure_url,
+					cloudinaryPublicId: uploaded.public_id,
+					mimetype: part.mimetype,
+					truncated: part.file.truncated,
+				};
+			} else {
+				const extension = extname(part.filename).toLowerCase() || ".mp4";
+				const filename = `${randomUUID()}${extension}`;
+				const destination = join(uploadsDirectory, filename);
 
-			try {
-				await pipeline(part.file, createWriteStream(destination));
-			} catch (error) {
-				await unlink(destination).catch(() => {});
-				throw error;
+				try {
+					await pipeline(part.file, createWriteStream(destination));
+				} catch (error) {
+					await unlink(destination).catch(() => {});
+					throw error;
+				}
+
+				uploadedFile = {
+					videoPath: `/uploads/${filename}`,
+					destination,
+					mimetype: part.mimetype,
+					truncated: part.file.truncated,
+				};
 			}
-
-			uploadedFile = {
-				filename,
-				destination,
-				mimetype: part.mimetype,
-				truncated: part.file.truncated,
-			};
 		} else {
 			fields[part.fieldname] = part.value;
 		}
@@ -91,7 +135,7 @@ server.post("/videos", async (request, reply) => {
 	const duration = Number(fields.duration);
 
 	if (!title || !description || !Number.isInteger(duration) || duration < 0) {
-		if (uploadedFile) await unlink(uploadedFile.destination).catch(() => {});
+		await removeStoredVideo(uploadedFile);
 		return reply.status(400).send({ message: "Dados do vídeo inválidos." });
 	}
 
@@ -102,7 +146,7 @@ server.post("/videos", async (request, reply) => {
 	}
 
 	if (uploadedFile.truncated) {
-		await unlink(uploadedFile.destination).catch(() => {});
+		await removeStoredVideo(uploadedFile);
 		return reply
 			.status(413)
 			.send({ message: "O vídeo ultrapassa o limite de 100 MB." });
@@ -113,11 +157,13 @@ server.post("/videos", async (request, reply) => {
 			title,
 			description,
 			duration,
-			videoPath: `/uploads/${uploadedFile.filename}`,
+			videoPath: uploadedFile.videoPath || null,
+			videoUrl: uploadedFile.videoUrl || null,
 			videoMimeType: uploadedFile.mimetype,
+			cloudinaryPublicId: uploadedFile.cloudinaryPublicId || null,
 		});
 	} catch (error) {
-		await unlink(uploadedFile.destination).catch(() => {});
+		await removeStoredVideo(uploadedFile);
 		throw error;
 	}
 
@@ -261,12 +307,7 @@ server.delete(
 			return reply.status(404).send({ message: "Video not found" });
 		}
 
-		if (deleted.videoPath) {
-			const filename = basename(deleted.videoPath);
-			await unlink(join(uploadsDirectory, filename)).catch((error) => {
-				if (error.code !== "ENOENT") throw error;
-			});
-		}
+		await removeStoredVideo(deleted);
 
 		return reply.status(204).send();
 	},

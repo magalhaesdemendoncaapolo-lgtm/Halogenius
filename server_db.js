@@ -9,11 +9,15 @@ await sql`
     description TEXT NOT NULL,
     duration INTEGER NOT NULL CHECK (duration >= 0),
     video_path TEXT,
-    video_mime_type TEXT
+    video_url TEXT,
+    video_mime_type TEXT,
+    cloudinary_public_id TEXT
   )
 `;
 
 await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_path TEXT`;
 await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_mime_type TEXT`;
+await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_url TEXT`;
+await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT`;
 
 await sql.end();

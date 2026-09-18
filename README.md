@@ -74,3 +74,9 @@ Para gerar o build de produção da interface:
 cd REACT
 npm.cmd run build
 ```
+
+## Publicação
+
+Para publicar o Halogenius, use o Cloudinary para armazenar os vídeos. Copie `.env.example` para `.env` e preencha `CLOUDINARY_URL` e o domínio permitido em `CORS_ORIGIN`. Com essas variáveis configuradas, novos uploads recebem uma URL pública do Cloudinary.
+
+No frontend publicado, copie `REACT/.env.example` para `REACT/.env` e defina `VITE_API_URL` com a URL pública da API. Os arquivos já existentes em `uploads/` continuam locais e precisam ser enviados novamente para ficarem públicos.

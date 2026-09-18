@@ -5,7 +5,9 @@
 		"db:setup": "node server_db.js"
 	},
 	"dependencies": {
+		"@fastify/cors": "^11.3.0",
 		"@fastify/multipart": "^10.1.1",
+		"cloudinary": "^2.11.0",
 		"dotenv": "^17.4.2",
 		"fastify": "^5.12.3",
 		"postgres": "^3.4.9"

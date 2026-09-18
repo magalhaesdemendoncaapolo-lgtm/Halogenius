@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const emptyVideo = { title: "", description: "", duration: "" };
-const API_URL = "/api/videos";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const API_URL = `${API_BASE_URL}/videos`;
 
 function formatDuration(seconds) {
 	const value = Number(seconds);
@@ -269,14 +270,14 @@ export default function App() {
 								{shareMessage.text}
 							</p>
 						)}
-						{openedVideo.videoPath ? (
+						{openedVideo.videoUrl ? (
 							<div className="video-player">
 								<video
 									ref={playerRef}
 									controls
 									onLoadedMetadata={enableAudio}
 									preload="metadata"
-									src={openedVideo.videoPath}
+									src={openedVideo.videoUrl}
 								>
 									<track
 										default
