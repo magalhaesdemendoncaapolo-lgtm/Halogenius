@@ -1,29 +1,32 @@
-POST http://localhost:3333/videos
+@baseUrl = http://localhost:3333/api
+
+### Saúde
+GET {{baseUrl}}/health
+
+### Listar
+GET {{baseUrl}}/videos
+
+### Pesquisar
+GET {{baseUrl}}/videos?search=teste
+
+### Autorizar upload: o formulário envia o arquivo diretamente ao ImageKit
+POST {{baseUrl}}/uploads/authorize
+Content-Type: application/json
+
+{
+  "name": "video.mp4",
+  "size": 6000000,
+  "type": "video/mp4"
+}
+
+### Cadastrar após upload: substitua pelos dados reais retornados
+POST {{baseUrl}}/videos
 Content-Type: application/json
 
 {
   "title": "Vídeo de teste",
-  "description": "Teste da API local",
-  "duration": 180
+  "description": "Teste da API",
+  "duration": 8,
+  "fileId": "IDENTIFICADOR_DO_IMAGEKIT",
+  "receipt": "COMPROVANTE_DA_AUTORIZACAO"
 }
-
-###
-
-GET http://localhost:3333/videos?search=node
-
-
-###
-PUT http://localhost:3333/videos/2285af99-a8ab-45a3-bcdc-431d1b184bfd
-Content-Type: application/json
-
-
-
-{
-  "title": "FLA X VAS",
-  "description": "ODD de 5.6 = FLA",
-  "duration": 1020
-}
-
-###
-
-DELETE http://localhost:3333/videos/f4089565-5971-4552-b082-9737a2ddbc3b

@@ -1,82 +1,109 @@
 # Halogenius
 
-Biblioteca de vídeos com operações de criar, listar, pesquisar, editar e excluir vídeos.
+Biblioteca de vídeos com React/Vite, Fastify, PostgreSQL e ImageKit.
+A interface e a API são publicadas juntas na Vercel, pela raiz do repositório.
 
-## Tecnologias
+## Fluxo de upload
 
-- API: Node.js, Fastify e PostgreSQL
-- Interface: React e Vite
-- Qualidade de código: Biome
+1. O navegador pede autorização em `POST /api/uploads/authorize`.
+2. Envia o arquivo diretamente ao ImageKit usando uma assinatura temporária.
+3. Envia somente os dados, o identificador do arquivo e o comprovante para `POST /api/videos`.
+4. A API confere o arquivo no ImageKit e salva sua URL no PostgreSQL.
 
-## Requisitos
+Limite da aplicação: 100 MB por vídeo. O arquivo não passa pelas Functions da Vercel,
+que limitam o payload a 4,5 MB. A chave privada fica somente na API.
+O banco continua no provedor atual. O Render não participa dessa estrutura.
 
-- Node.js instalado
-- Uma base PostgreSQL acessível
+## Desenvolvimento no PowerShell
 
-## Configuração
+Use Node.js 24. Na raiz:
 
-Crie um arquivo `.env` na raiz do projeto e informe a conexão do banco:
+```powershell
+cd 'C:\Users\ALBERTO MENDONÇA\OneDrive\Documentos\Halogenius'
+npm.cmd ci
+npm.cmd ci --prefix REACT
+```
+
+Configure o `.env` da raiz, preservando a conexão existente:
 
 ```env
-DATABASE_URL=sua_url_de_conexao_postgresql
+DATABASE_URL=postgresql://usuario:senha@host/database?sslmode=require
+IMAGEKIT_PRIVATE_KEY=sua_chave_privada
+IMAGEKIT_PUBLIC_KEY=sua_chave_publica
 ```
 
-Não envie esse arquivo ao Git: ele pode conter credenciais.
+As duas chaves precisam pertencer à mesma conta ImageKit. Não coloque chaves privadas
+no React nem use prefixo `VITE_`. Não envie o `.env` ao Git.
+A API obtém a URL de entrega do próprio ImageKit.
 
-## Como iniciar o projeto
-
-Instale as dependências da API:
-
-```powershell
-cd 'C:\Users\ALBERTO MENDONÇA\OneDrive\Documentos\Halogenius'
-npm.cmd install
-```
-
-No primeiro terminal, inicie a API:
+Prepare o banco e inicie a API:
 
 ```powershell
-cd 'C:\Users\ALBERTO MENDONÇA\OneDrive\Documentos\Halogenius'
+npm.cmd run db:setup
 npm.cmd run dev
 ```
 
-A API estará disponível em `http://127.0.0.1:3333`.
-
-Em um segundo terminal, instale e inicie a interface:
+API: `http://127.0.0.1:3333/api/health`. Em outro terminal:
 
 ```powershell
 cd 'C:\Users\ALBERTO MENDONÇA\OneDrive\Documentos\Halogenius\REACT'
-npm.cmd install
 npm.cmd run dev
 ```
 
-Abra a URL exibida pelo Vite, normalmente `http://localhost:5173`.
+Abra a URL do Vite, normalmente `http://localhost:5173`.
+O Vite encaminha `/api` para a API local. Reinicie a API se a versão anterior ainda
+estiver usando a porta 3333. O arquivo `routes.http` serve para testar a API, não é a interface.
 
-## Endpoints da API
+## Publicação na Vercel
 
-| Método | Rota | Descrição |
-| --- | --- | --- |
-| GET | `/videos` | Lista vídeos; aceita `?search=texto` |
-| POST | `/videos` | Cria um vídeo |
-| PUT | `/videos/:id` | Atualiza um vídeo |
-| DELETE | `/videos/:id` | Exclui um vídeo |
+No projeto existente:
+
+1. Em Settings → Build and Deployment, deixe **Root Directory vazio (raiz)**.
+   Não use mais `REACT`, pois isso excluiria a API do deploy.
+2. Use o preset **Other**. O `vercel.json` define o build do Vite e a Function:
+   - Install Command: `npm ci && npm ci --prefix REACT`
+   - Build Command: `npm run build`
+   - Output Directory: `REACT/dist`
+3. Em Environment Variables, configure `DATABASE_URL`, `IMAGEKIT_PRIVATE_KEY`
+   e `IMAGEKIT_PUBLIC_KEY` para Production e, se necessário, Preview.
+4. Remova a antiga `VITE_API_URL` do Render. A interface usa sempre `/api`.
+5. Execute `npm.cmd run db:setup` contra o banco de destino antes do deploy.
+6. Publique esta versão do repositório e faça o deploy pela raiz.
+
+Não é necessário configurar CORS entre a interface e a API: usam o mesmo domínio.
+`api/index.js` recebe as requisições da Vercel; `local-server.js` inicia a API local.
+`/api/*` é encaminhado à Function antes das páginas React.
+`/videos/<id>` abre o player; `/api/videos` retorna JSON.
+
+Valide `/api/health`, `/api/videos`, upload, reprodução e exclusão após publicar.
+Só desative o serviço antigo do Render depois de validar o novo deploy.
+
+## Arquivos antigos e novas tentativas
+
+Os registros antigos são preservados. URLs do Cloudinary podem estar indisponíveis.
+Arquivos da pasta `uploads/` não são publicados nem servidos pela Vercel: precisam
+ser reenviados ao ImageKit. A exclusão de registros legados não apaga arquivos antigos
+no Cloudinary ou no disco.
+
+Se o upload terminar, mas o cadastro falhar, clique novamente em Adicionar vídeo
+sem trocar o arquivo ou recarregar a página. O upload é reutilizado e o banco evita
+duplicação pelo identificador. O comprovante dura 24 horas. Arquivos enviados e
+abandonados antes do cadastro podem ficar no ImageKit e ser removidos pelo painel.
 
 ## Verificações
 
-Para verificar o código com o Biome:
+Na raiz:
 
 ```powershell
+npm.cmd test
 .\node_modules\.bin\biome.cmd check .
-```
-
-Para gerar o build de produção da interface:
-
-```powershell
-cd REACT
 npm.cmd run build
 ```
 
-## Publicação
+Os testes simulam rotas, assinaturas, erros e o envio direto de arquivos maiores que
+4,5 MB. O upload real precisa ser validado com chaves válidas após o deploy.
 
-Para publicar o Halogenius, use o Cloudinary para armazenar os vídeos. Copie `.env.example` para `.env` e preencha `CLOUDINARY_URL` e o domínio permitido em `CORS_ORIGIN`. Com essas variáveis configuradas, novos uploads recebem uma URL pública do Cloudinary.
-
-No frontend publicado, copie `REACT/.env.example` para `REACT/.env` e defina `VITE_API_URL` com a URL pública da API. Os arquivos já existentes em `uploads/` continuam locais e precisam ser enviados novamente para ficarem públicos.
+Referências:
+- [Vercel: limite de payload](https://vercel.com/docs/errors/function_payload_too_large)
+- [Vercel: Functions Node.js](https://vercel.com/docs/functions/runtimes/node-js)
+- [ImageKit: SDK Node.js](https://github.com/imagekit-developer/imagekit-nodejs)

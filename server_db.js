@@ -19,5 +19,6 @@ await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_path TEXT`;
 await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_mime_type TEXT`;
 await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_url TEXT`;
 await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT`;
+await sql`ALTER TABLE videos ADD COLUMN IF NOT EXISTS imagekit_file_id TEXT`;
 
 await sql.end();

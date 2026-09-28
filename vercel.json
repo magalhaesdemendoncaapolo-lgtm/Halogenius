@@ -1,0 +1,13 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"framework": null,
+	"installCommand": "npm ci && npm ci --prefix REACT",
+	"buildCommand": "npm run build",
+	"outputDirectory": "REACT/dist",
+	"functions": { "api/index.js": { "maxDuration": 60 } },
+	"routes": [
+		{ "src": "/api(?:/.*)?", "dest": "/api/index" },
+		{ "handle": "filesystem" },
+		{ "src": "/.*", "dest": "/index.html" }
+	]
+}

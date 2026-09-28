@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readResponse, uploadVideo } from "./upload.js";
 
 const emptyVideo = { title: "", description: "", duration: "" };
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const API_BASE_URL = "/api";
 const API_URL = `${API_BASE_URL}/videos`;
+
+function resolveVideoUrl(videoUrl) {
+	if (!videoUrl) return undefined;
+	const apiUrl = new URL(API_BASE_URL, window.location.origin);
+	return new URL(videoUrl, apiUrl.origin).href;
+}
 
 function formatDuration(seconds) {
 	const value = Number(seconds);
@@ -30,6 +37,7 @@ export default function App() {
 	const [shareMessage, setShareMessage] = useState(null);
 	const [pathname, setPathname] = useState(() => window.location.pathname);
 	const playerRef = useRef(null);
+	const pendingUpload = useRef(null);
 	const openedVideoId = useMemo(() => getVideoIdFromPath(pathname), [pathname]);
 	const openedVideo = videos.find((video) => video.id === openedVideoId);
 
@@ -131,6 +139,7 @@ export default function App() {
 	}
 
 	function resetForm() {
+		pendingUpload.current = null;
 		setForm(emptyVideo);
 		setVideoFile(null);
 		setFileInputKey((current) => current + 1);
@@ -138,6 +147,7 @@ export default function App() {
 	}
 
 	function selectVideoFile(event) {
+		pendingUpload.current = null;
 		const [file] = event.target.files;
 		setVideoFile(file || null);
 
@@ -165,34 +175,46 @@ export default function App() {
 		const isEditing = Boolean(editingId);
 		let options;
 
-		if (isEditing) {
-			options = {
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ ...form, duration: Number(form.duration) }),
-			};
-		} else {
-			if (!videoFile) {
-				setMessage({ type: "error", text: "Selecione um arquivo de vídeo." });
-				setSubmitting(false);
-				return;
+		try {
+			if (isEditing) {
+				options = {
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ ...form, duration: Number(form.duration) }),
+				};
+			} else {
+				if (!videoFile) {
+					setMessage({ type: "error", text: "Selecione um arquivo de vídeo." });
+					setSubmitting(false);
+					return;
+				}
+
+				if (
+					!pendingUpload.current ||
+					pendingUpload.current.file !== videoFile
+				) {
+					pendingUpload.current = {
+						file: videoFile,
+						data: await uploadVideo(videoFile),
+					};
+				}
+				options = {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						...form,
+						duration: Number(form.duration),
+						...pendingUpload.current.data,
+					}),
+				};
 			}
 
-			const payload = new FormData();
-			payload.append("title", form.title);
-			payload.append("description", form.description);
-			payload.append("duration", form.duration);
-			payload.append("video", videoFile);
-			options = { method: "POST", body: payload };
-		}
-
-		try {
 			const response = await fetch(
 				isEditing ? `${API_URL}/${editingId}` : API_URL,
 				options,
 			);
 
-			if (!response.ok) throw new Error("Não foi possível salvar o vídeo.");
+			await readResponse(response);
 
 			resetForm();
 			setMessage({
@@ -275,9 +297,10 @@ export default function App() {
 								<video
 									ref={playerRef}
 									controls
+									playsInline
 									onLoadedMetadata={enableAudio}
 									preload="metadata"
-									src={openedVideo.videoUrl}
+									src={resolveVideoUrl(openedVideo.videoUrl)}
 								>
 									<track
 										default

@@ -1,6 +1,11 @@
 import sql from "./sqldb.js";
 
 export class DatabasePostgres {
+	async find(id) {
+		const rows =
+			await sql`SELECT id, imagekit_file_id AS "imagekitFileId" FROM videos WHERE id = ${id}`;
+		return rows[0] || null;
+	}
 	async list(search) {
 		if (search) {
 			return sql`
@@ -29,18 +34,26 @@ export class DatabasePostgres {
 			videoUrl,
 			videoMimeType,
 			cloudinaryPublicId,
+			imagekitFileId,
 		} = video;
 
-		await sql`
+		await sql.begin(async (transaction) => {
+			// Serialize retries for this upload, including retries on another Vercel instance.
+			await transaction`SELECT pg_advisory_xact_lock(hashtextextended(${imagekitFileId}, 0))`;
+			const existing =
+				await transaction`SELECT id FROM videos WHERE imagekit_file_id = ${imagekitFileId}`;
+			if (existing.length) return;
+			await transaction`
             INSERT INTO videos (
                 title, description, duration, video_path, video_url,
-                video_mime_type, cloudinary_public_id
+                video_mime_type, cloudinary_public_id, imagekit_file_id
             )
             VALUES (
                 ${title}, ${description}, ${duration}, ${videoPath}, ${videoUrl},
-                ${videoMimeType}, ${cloudinaryPublicId}
+                ${videoMimeType}, ${cloudinaryPublicId}, ${imagekitFileId}
             )
         `;
+		});
 	}
 
 	async update(id, video) {
@@ -61,7 +74,8 @@ export class DatabasePostgres {
             WHERE id = ${id}
             RETURNING
                 video_path AS "videoPath",
-                cloudinary_public_id AS "cloudinaryPublicId"
+                cloudinary_public_id AS "cloudinaryPublicId",
+                imagekit_file_id AS "imagekitFileId"
         `;
 
 		return result[0] || null;
