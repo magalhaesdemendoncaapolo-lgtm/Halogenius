@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LoginPanel, UserManagement } from "./auth-panel.jsx";
 import { readResponse, uploadVideo } from "./upload.js";
 
 const emptyVideo = { title: "", description: "", duration: "" };
@@ -36,10 +37,15 @@ export default function App() {
 	const [message, setMessage] = useState(null);
 	const [shareMessage, setShareMessage] = useState(null);
 	const [pathname, setPathname] = useState(() => window.location.pathname);
+	const [user, setUser] = useState(null);
+	const [authLoading, setAuthLoading] = useState(true);
+	const [showLogin, setShowLogin] = useState(false);
+	const [showUsers, setShowUsers] = useState(false);
 	const playerRef = useRef(null);
 	const pendingUpload = useRef(null);
 	const openedVideoId = useMemo(() => getVideoIdFromPath(pathname), [pathname]);
 	const openedVideo = videos.find((video) => video.id === openedVideoId);
+	const canManageVideos = user?.role === "admin" || user?.role === "editor";
 
 	const pageTitle = useMemo(
 		() => (editingId ? "Editar vídeo" : "Adicionar vídeo"),
@@ -60,6 +66,14 @@ export default function App() {
 		} finally {
 			setLoading(false);
 		}
+	}, []);
+
+	useEffect(() => {
+		fetch("/api/auth/session")
+			.then(readResponse)
+			.then((body) => setUser(body.user))
+			.catch(() => setUser(null))
+			.finally(() => setAuthLoading(false));
 	}, []);
 
 	useEffect(() => {
@@ -257,6 +271,16 @@ export default function App() {
 		}
 	}
 
+	async function logout() {
+		try {
+			await readResponse(await fetch("/api/auth/logout", { method: "POST" }));
+		} finally {
+			setUser(null);
+			setShowUsers(false);
+			resetForm();
+		}
+	}
+
 	if (openedVideoId) {
 		return (
 			<main className="page-shell">
@@ -346,88 +370,153 @@ export default function App() {
 	return (
 		<main className="page-shell">
 			<header className="hero">
-				<p className="eyebrow">LUGENIUS</p>
-				<h1>Biblioteca de vídeos</h1>
-				<p>Organize os seus conteúdos em um só lugar.</p>
-			</header>
-
-			<section className="workspace" aria-label="Gerenciamento de vídeos">
-				<form className="video-form" onSubmit={submitForm}>
-					<div className="form-heading">
-						<h2>{pageTitle}</h2>
-						{editingId && (
-							<button className="link-button" type="button" onClick={resetForm}>
-								Cancelar edição
-							</button>
-						)}
-					</div>
-
-					<label>
-						Título
-						<input
-							name="title"
-							value={form.title}
-							onChange={updateField}
-							maxLength="255"
-							required
-						/>
-					</label>
-					<label>
-						Descrição
-						<textarea
-							name="description"
-							value={form.description}
-							onChange={updateField}
-							rows="4"
-							required
-						/>
-					</label>
-					<label>
-						Duração (segundos)
-						<input
-							name="duration"
-							value={form.duration}
-							onChange={updateField}
-							type="number"
-							min="0"
-							step="1"
-							required
-						/>
-					</label>
-					{!editingId && (
-						<div className="upload-field">
-							<label htmlFor="video-file">
-								Arquivo de vídeo (máximo de 100 MB)
-							</label>
-							<input
-								key={fileInputKey}
-								className="file-input"
-								id="video-file"
-								accept="video/*"
-								onChange={selectVideoFile}
-								required
-								type="file"
-							/>
-							<label className="file-picker" htmlFor="video-file">
-								Escolher vídeo
-							</label>
-							<p className="file-name">
-								{videoFile?.name || "Nenhum arquivo selecionado"}
-							</p>
+				<div className="hero-access">
+					<p className="eyebrow">LUGENIUS</p>
+					{!authLoading && (
+						<div className="access-actions">
+							{user ? (
+								<>
+									<span>
+										{user.name} ·{" "}
+										{user.role === "admin" ? "Administrador" : "Editor"}
+									</span>
+									{user.role === "admin" && (
+										<button
+											className="link-button"
+											type="button"
+											onClick={() => setShowUsers((value) => !value)}
+										>
+											Usuários
+										</button>
+									)}
+									<button
+										className="link-button"
+										type="button"
+										onClick={logout}
+									>
+										Sair
+									</button>
+								</>
+							) : (
+								<button
+									className="login-button"
+									type="button"
+									onClick={() => setShowLogin((value) => !value)}
+								>
+									Entrar
+								</button>
+							)}
 						</div>
 					)}
-					<button
-						className="primary-button"
-						disabled={submitting}
-						type="submit"
-					>
-						{submitting
-							? "Salvando…"
-							: editingId
-								? "Salvar alterações"
-								: "Adicionar vídeo"}
-					</button>
-				</form>
+				</div>
+				<h1>Biblioteca de vídeos</h1>
+				<p>
+					Assista aos conteúdos publicados. Usuários autorizados podem gerenciar
+					a biblioteca.
+				</p>
+			</header>
+			{showLogin && !user && (
+				<LoginPanel
+					onCancel={() => setShowLogin(false)}
+					onLogin={(loggedUser) => {
+						setUser(loggedUser);
+						setShowLogin(false);
+					}}
+				/>
+			)}
+			{showUsers && user?.role === "admin" && (
+				<UserManagement
+					currentUser={user}
+					onClose={() => setShowUsers(false)}
+				/>
+			)}
+
+			<section
+				className={`workspace ${canManageVideos ? "" : "public-workspace"}`}
+				aria-label="Biblioteca de vídeos"
+			>
+				{canManageVideos && (
+					<form className="video-form" onSubmit={submitForm}>
+						<div className="form-heading">
+							<h2>{pageTitle}</h2>
+							{editingId && (
+								<button
+									className="link-button"
+									type="button"
+									onClick={resetForm}
+								>
+									Cancelar edição
+								</button>
+							)}
+						</div>
+
+						<label>
+							Título
+							<input
+								name="title"
+								value={form.title}
+								onChange={updateField}
+								maxLength="255"
+								required
+							/>
+						</label>
+						<label>
+							Descrição
+							<textarea
+								name="description"
+								value={form.description}
+								onChange={updateField}
+								rows="4"
+								required
+							/>
+						</label>
+						<label>
+							Duração (segundos)
+							<input
+								name="duration"
+								value={form.duration}
+								onChange={updateField}
+								type="number"
+								min="0"
+								step="1"
+								required
+							/>
+						</label>
+						{!editingId && (
+							<div className="upload-field">
+								<label htmlFor="video-file">
+									Arquivo de vídeo (máximo de 100 MB)
+								</label>
+								<input
+									key={fileInputKey}
+									className="file-input"
+									id="video-file"
+									accept="video/*"
+									onChange={selectVideoFile}
+									required
+									type="file"
+								/>
+								<label className="file-picker" htmlFor="video-file">
+									Escolher vídeo
+								</label>
+								<p className="file-name">
+									{videoFile?.name || "Nenhum arquivo selecionado"}
+								</p>
+							</div>
+						)}
+						<button
+							className="primary-button"
+							disabled={submitting}
+							type="submit"
+						>
+							{submitting
+								? "Salvando…"
+								: editingId
+									? "Salvar alterações"
+									: "Adicionar vídeo"}
+						</button>
+					</form>
+				)}
 
 				<section className="video-list">
 					<div className="list-header">
@@ -472,16 +561,20 @@ export default function App() {
 										>
 											Assistir
 										</button>
-										<button type="button" onClick={() => editVideo(video)}>
-											Editar
-										</button>
-										<button
-											className="danger"
-											type="button"
-											onClick={() => removeVideo(video)}
-										>
-											Excluir
-										</button>
+										{canManageVideos && (
+											<button type="button" onClick={() => editVideo(video)}>
+												Editar
+											</button>
+										)}
+										{canManageVideos && (
+											<button
+												className="danger"
+												type="button"
+												onClick={() => removeVideo(video)}
+											>
+												Excluir
+											</button>
+										)}
 									</div>
 								</article>
 							))}

@@ -9,6 +9,18 @@ GET {{baseUrl}}/videos
 ### Pesquisar
 GET {{baseUrl}}/videos?search=teste
 
+### Sessão atual; o cookie é mantido pelo cliente HTTP do editor
+GET {{baseUrl}}/auth/session
+
+### Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "seu-email@exemplo.com",
+  "password": "sua-senha"
+}
+
 ### Autorizar upload: o formulário envia o arquivo diretamente ao ImageKit
 POST {{baseUrl}}/uploads/authorize
 Content-Type: application/json

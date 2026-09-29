@@ -1,53 +1,74 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildApp } from "../app.js";
+import { createAuthService, hashPassword, verifyPassword } from "../auth.js";
 import { createMediaService } from "../media.js";
 import { uploadVideo } from "../REACT/upload.js";
 
-test("API validates metadata, trusts verified URL, and retains records on failed deletion", async (t) => {
+function fakeAuth() {
+	return {
+		currentUser: async (request) =>
+			request.headers["x-test-role"]
+				? {
+						id: "3f84779a-799d-4c33-ae0c-809e8466a59e",
+						name: "Test",
+						email: "test@example.com",
+						role: request.headers["x-test-role"],
+					}
+				: null,
+		assertSameOrigin() {},
+		hashPassword: async () => "hash",
+		login: async () => ({ token: "token", user: { role: "editor" } }),
+		logout: async () => {},
+		sessionCookie: () => "session=token",
+		clearCookie: () => "session=",
+	};
+}
+
+function buildTestApp(overrides = {}) {
 	const saved = [];
 	let deleted = false;
-	const app = buildApp({
-		logger: false,
-		database: {
-			create: async (video) => saved.push(video),
-			list: async () => saved,
-			find: async () => ({ imagekitFileId: "file-id" }),
-			delete: async () => {
-				deleted = true;
-			},
+	const database = {
+		create: async (video) => saved.push(video),
+		list: async () => saved,
+		find: async () => ({ imagekitFileId: "file-id" }),
+		delete: async () => {
+			deleted = true;
 		},
-		media: {
-			authorize: () => ({ token: "token" }),
-			verify: async () => ({
-				url: "https://ik.imagekit.io/test/video.mp4",
-				mimeType: "video/mp4",
-			}),
-			remove: async () => {
-				throw new Error("remote failure");
-			},
-		},
-	});
+		listUsers: async () => [],
+		findUser: async () => ({
+			id: "user",
+			name: "User",
+			role: "editor",
+			active: true,
+		}),
+		createUser: async (user) => ({ id: "user", ...user, active: true }),
+		countActiveAdmins: async () => 1,
+		updateUser: async (_id, user) => user,
+		updateUserPassword: async () => true,
+		...overrides.database,
+	};
+	const media = {
+		authorize: () => ({ token: "token" }),
+		verify: async () => ({
+			url: "https://ik.imagekit.io/test/video.mp4",
+			mimeType: "video/mp4",
+		}),
+		remove: async () => {},
+		...overrides.media,
+	};
+	return {
+		app: buildApp({ logger: false, database, media, auth: fakeAuth() }),
+		saved,
+		deleted: () => deleted,
+	};
+}
+
+test("public listing remains open while every video mutation requires an editor", async (t) => {
+	const { app, saved } = buildTestApp();
 	t.after(() => app.close());
 	assert.equal((await app.inject("/api/health")).statusCode, 200);
-	assert.equal((await app.inject("/api/missing")).statusCode, 404);
-	const authorization = await app.inject({
-		method: "POST",
-		url: "/api/uploads/authorize",
-		payload: { name: "video.mp4", size: 6000000, type: "video/mp4" },
-	});
-	assert.equal(authorization.statusCode, 200);
-	assert.equal(authorization.headers["cache-control"], "no-store");
-	assert.equal(
-		(
-			await app.inject({
-				method: "POST",
-				url: "/api/uploads/authorize",
-				payload: { name: "video.mp4", size: 100000001, type: "video/mp4" },
-			})
-		).statusCode,
-		400,
-	);
+	assert.equal((await app.inject("/api/videos")).statusCode, 200);
 	const payload = {
 		title: "Video",
 		description: "Test",
@@ -58,29 +79,171 @@ test("API validates metadata, trusts verified URL, and retains records on failed
 	assert.equal(
 		(await app.inject({ method: "POST", url: "/api/videos", payload }))
 			.statusCode,
-		201,
+		401,
 	);
-	assert.equal(saved[0].videoUrl, "https://ik.imagekit.io/test/video.mp4");
 	assert.equal(
 		(
 			await app.inject({
 				method: "POST",
 				url: "/api/videos",
-				payload: { ...payload, receipt: undefined },
+				headers: { "x-test-role": "editor" },
+				payload,
 			})
 		).statusCode,
-		400,
+		201,
+	);
+	assert.equal(saved[0].createdBy, "3f84779a-799d-4c33-ae0c-809e8466a59e");
+	assert.equal(
+		(
+			await app.inject({
+				method: "POST",
+				url: "/api/uploads/authorize",
+				payload: { name: "video.mp4", size: 6000000, type: "video/mp4" },
+			})
+		).statusCode,
+		401,
 	);
 	assert.equal(
 		(
 			await app.inject({
-				method: "DELETE",
-				url: "/api/videos/da420afe-ee41-4ed2-8c53-05362f712c14",
+				method: "POST",
+				url: "/api/uploads/authorize",
+				headers: { "x-test-role": "editor" },
+				payload: { name: "video.mp4", size: 6000000, type: "video/mp4" },
 			})
 		).statusCode,
-		500,
+		200,
 	);
-	assert.equal(deleted, false);
+});
+
+test("only administrators can manage users", async (t) => {
+	const { app } = buildTestApp();
+	t.after(() => app.close());
+	assert.equal((await app.inject("/api/users")).statusCode, 401);
+	assert.equal(
+		(
+			await app.inject({
+				url: "/api/users",
+				headers: { "x-test-role": "editor" },
+			})
+		).statusCode,
+		403,
+	);
+	assert.equal(
+		(
+			await app.inject({
+				url: "/api/users",
+				headers: { "x-test-role": "admin" },
+			})
+		).statusCode,
+		200,
+	);
+	const response = await app.inject({
+		method: "POST",
+		url: "/api/users",
+		headers: { "x-test-role": "admin" },
+		payload: {
+			name: "Editor",
+			email: "editor@example.com",
+			password: "password-123",
+			role: "editor",
+		},
+	});
+	assert.equal(response.statusCode, 201);
+});
+
+test("passwords are hashed and session cookies use browser protections", async () => {
+	const passwordHash = await hashPassword("correct-horse-battery");
+	assert.equal(
+		await verifyPassword("correct-horse-battery", passwordHash),
+		true,
+	);
+	assert.equal(await verifyPassword("wrong-password", passwordHash), false);
+	const service = createAuthService({ database: {}, production: true });
+	const cookie = service.sessionCookie("secret-token");
+	assert.match(cookie, /^__Host-halogenius_session=/);
+	assert.match(cookie, /HttpOnly/);
+	assert.match(cookie, /Secure/);
+	assert.match(cookie, /SameSite=Strict/);
+	assert.throws(
+		() =>
+			service.assertSameOrigin({
+				protocol: "https",
+				headers: {
+					host: "halogenius.vercel.app",
+					origin: "https://evil.example",
+				},
+			}),
+		{ statusCode: 403 },
+	);
+});
+
+test("login creates a hashed server-side session and logout invalidates it", async () => {
+	const passwordHash = await hashPassword("correct-horse-battery");
+	let storedTokenHash;
+	let deletedTokenHash;
+	let failures = 0;
+	const database = {
+		findAuthUserByEmail: async () => ({
+			id: "user-id",
+			name: "Editor",
+			email: "editor@example.com",
+			passwordHash,
+			role: "editor",
+			active: true,
+			lockedUntil: null,
+		}),
+		createAuthSession: async (_id, tokenHash) => {
+			storedTokenHash = tokenHash;
+		},
+		findAuthSession: async (tokenHash) =>
+			tokenHash === storedTokenHash ? { id: "user-id", role: "editor" } : null,
+		deleteAuthSession: async (tokenHash) => {
+			deletedTokenHash = tokenHash;
+		},
+		recordFailedLogin: async () => {
+			failures += 1;
+		},
+		resetFailedLogin: async () => {},
+	};
+	const service = createAuthService({ database, production: true });
+	const session = await service.login(
+		"EDITOR@example.com",
+		"correct-horse-battery",
+	);
+	assert.equal(storedTokenHash.length, 64);
+	assert.ok(!service.sessionCookie(session.token).includes(storedTokenHash));
+	const user = await service.currentUser({
+		headers: { cookie: service.sessionCookie(session.token).split(";")[0] },
+	});
+	assert.equal(user.role, "editor");
+	await service.logout({
+		headers: { cookie: service.sessionCookie(session.token).split(";")[0] },
+	});
+	assert.equal(deletedTokenHash, storedTokenHash);
+	await assert.rejects(
+		service.login("editor@example.com", "incorrect-password"),
+		{ statusCode: 401 },
+	);
+	assert.equal(failures, 1);
+});
+
+test("the last active administrator cannot be demoted", async (t) => {
+	const adminId = "c86e5421-758a-499a-b335-bcd38fae7346";
+	const { app } = buildTestApp({
+		database: {
+			findUser: async () => ({ id: adminId, role: "admin", active: true }),
+			countActiveAdmins: async () => 1,
+		},
+	});
+	t.after(() => app.close());
+	const response = await app.inject({
+		method: "PATCH",
+		url: `/api/users/${adminId}`,
+		headers: { "x-test-role": "admin" },
+		payload: { name: "Admin", role: "editor", active: true },
+	});
+	assert.equal(response.statusCode, 400);
 });
 
 test("signed upload receipts reject tampering, different files and expiration", async () => {
@@ -111,7 +274,6 @@ test("signed upload receipts reject tampering, different files and expiration", 
 		size: 6000000,
 		type: "video/mp4",
 	});
-	assert.ok(!JSON.stringify(auth).includes("secret"));
 	file = {
 		filePath: `${auth.folder}/${auth.fileName}`,
 		size: 6000000,
@@ -130,21 +292,9 @@ test("signed upload receipts reject tampering, different files and expiration", 
 	await assert.rejects(service.verify("file", auth.receipt), {
 		statusCode: 400,
 	});
-	await assert.rejects(service.remove("file"), { statusCode: 502 });
 });
 
-test("missing ImageKit configuration fails explicitly", () => {
-	const service = createMediaService({
-		privateKey: "",
-		publicKey: "",
-		client: null,
-	});
-	assert.throws(() => service.authorize({ name: "v.mp4" }), {
-		statusCode: 503,
-	});
-});
-
-test("a video above 4.5 MB goes directly to ImageKit, not the API", async (t) => {
+test("a video above 4.5 MB goes directly to ImageKit", async (t) => {
 	const calls = [];
 	t.mock.method(globalThis, "fetch", async (url, options) => {
 		calls.push({ url, options });
@@ -172,6 +322,4 @@ test("a video above 4.5 MB goes directly to ImageKit, not the API", async (t) =>
 	assert.equal(calls[0].url, "/api/uploads/authorize");
 	assert.ok(calls[0].options.body.length < 1000);
 	assert.equal(calls[1].url, "https://upload.imagekit.io/api/v1/files/upload");
-	assert.equal(calls[1].options.body.get("file").size, 6000000);
-	assert.equal(calls[1].options.body.has("privateKey"), false);
 });

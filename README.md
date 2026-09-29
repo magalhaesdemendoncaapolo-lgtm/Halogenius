@@ -3,6 +3,9 @@
 Biblioteca de vídeos com React/Vite, Fastify, PostgreSQL e ImageKit.
 A interface e a API são publicadas juntas na Vercel, pela raiz do repositório.
 
+Os vídeos e o player são públicos. Contas com permissão de editor podem enviar,
+editar e excluir vídeos; administradores também criam, ativam e desativam usuários.
+
 ## Fluxo de upload
 
 1. O navegador pede autorização em `POST /api/uploads/authorize`.
@@ -43,6 +46,23 @@ npm.cmd run db:setup
 npm.cmd run dev
 ```
 
+## Primeiro administrador
+
+Depois de preparar o banco, crie ou atualize sua conta administrativa. A senha não
+aparece enquanto é digitada e não é armazenada em arquivos:
+
+```powershell
+cd 'C:\Users\ALBERTO MENDONÇA\OneDrive\Documentos\Halogenius'
+npm.cmd run admin:create -- --email "seu-email@exemplo.com" --name "Seu nome"
+```
+
+Use uma senha exclusiva com pelo menos 10 caracteres. Depois de entrar no site,
+abra **Usuários** para criar editores, alterar permissões, desativar acessos ou
+trocar senhas. Não existe cadastro público de usuários.
+
+As sessões duram oito horas e usam cookie `HttpOnly`, `Secure` e `SameSite=Strict`
+em produção. Cinco senhas incorretas bloqueiam temporariamente a conta por 15 minutos.
+
 API: `http://127.0.0.1:3333/api/health`. Em outro terminal:
 
 ```powershell
@@ -78,6 +98,10 @@ Não é necessário configurar CORS entre a interface e a API: usam o mesmo dom�
 Valide `/api/health`, `/api/videos`, upload, reprodução e exclusão após publicar.
 Só desative o serviço antigo do Render depois de validar o novo deploy.
 
+As rotas de leitura de vídeos permanecem públicas. As rotas de upload, criação,
+edição e exclusão exigem uma sessão de editor ou administrador. A gestão de usuários
+é exclusiva de administradores e essas regras são verificadas pela API.
+
 ## Arquivos antigos e novas tentativas
 
 Os registros antigos são preservados. URLs do Cloudinary podem estar indisponíveis.
@@ -107,3 +131,4 @@ Referências:
 - [Vercel: limite de payload](https://vercel.com/docs/errors/function_payload_too_large)
 - [Vercel: Functions Node.js](https://vercel.com/docs/functions/runtimes/node-js)
 - [ImageKit: SDK Node.js](https://github.com/imagekit-developer/imagekit-nodejs)
+- [OWASP: gerenciamento de sessões](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
