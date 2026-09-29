@@ -25,15 +25,21 @@ function readHidden(prompt) {
 			if (error) reject(error);
 			else resolve(value);
 		}
-		function onData(character) {
-			if (character === "\u0003")
-				return finish(new Error("Operação cancelada."));
-			if (character === "\r" || character === "\n") return finish();
-			if (character === "\u007f" || character === "\b") {
-				value = value.slice(0, -1);
-				return;
+		function onData(input) {
+			for (const character of input) {
+				if (character === "\u0003")
+					return finish(new Error("Operação cancelada."));
+				if (character === "\r" || character === "\n") return finish();
+				if (character === "\u007f" || character === "\b") {
+					if (value) {
+						value = value.slice(0, -1);
+						stdout.write("\b \b");
+					}
+					continue;
+				}
+				value += character;
+				stdout.write("*");
 			}
-			value += character;
 		}
 		stdin.on("data", onData);
 	});
